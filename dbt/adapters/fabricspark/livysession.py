@@ -16,6 +16,7 @@ from azure.core.credentials import AccessToken
 from azure.identity import AzureCliCredential, ClientSecretCredential
 from dbt.adapters.fabricspark.fabric_spark_credentials import SparkCredentials
 from dbt.adapters.fabricspark.shortcuts import ShortcutClient
+import textwrap
 
 logger = AdapterLogger("Microsoft Fabric-Spark")
 NUMBERS = DECIMALS + (int, float)
@@ -310,13 +311,14 @@ class LivyCursor:
         """
         self._rows = None
 
-    def _submitLivyCode(self, code) -> Response:
+    # Add language parameter for diffrent workloads(sql/pyspark).
+    def _submitLivyCode(self, code, language="sql") -> Response:
         if self.livy_session.is_new_session_required:
             LivySessionManager.connect(self.credential)
             self.session_id = self.livy_session.session_id
 
-        # Submit code
-        data = {"code": code, "kind": "sql"}
+        # Submit code. Enable pyspark tasks.
+        data = {"code": code, "kind": language}
         logger.debug(
             f"Submitted: {data} {self.connect_url + '/sessions/' + self.session_id + '/statements'}"
         )
@@ -340,6 +342,10 @@ class LivyCursor:
         code = re.sub(r"\s*/\*(.|\n)*?\*/\s*", "\n", sql, re.DOTALL).strip()
         return code
 
+    # Trim any common leading whitespace in Python codes.
+    def _getLivyPyspark(self, code) -> str:
+        return textwrap.dedent(code)
+
     def _getLivyResult(self, res_obj) -> Response:
         json_res = res_obj.json()
         while True:
@@ -357,14 +363,17 @@ class LivyCursor:
                 return res
             time.sleep(DEFAULT_POLL_STATEMENT_WAIT)
 
-    def execute(self, sql: str, *parameters: Any) -> None:
+    # Support pyspark tasks.
+    def execute(self, code: str, language: str, *parameters: Any) -> None:
         """
-        Execute a sql statement.
+        Execute a sql statement or a pyspark statement.
 
         Parameters
         ----------
-        sql : str
-            Execute a sql statement.
+        code : str
+            Execute a sql statement or a pyspark statement.
+        language : str
+            Specify workloads: sql/pyspark
         *parameters : Any
             The parameters.
 
@@ -377,15 +386,20 @@ class LivyCursor:
         ------
         https://github.com/mkleehammer/pyodbc/wiki/Cursor#executesql-parameters
         """
+        # print("LivyCursor.execute()".center(80,'-'))
+        # print(f"language={language}")
+        # print(code)
         if len(parameters) > 0:
-            sql = sql % parameters
+            code = code % parameters
 
         # TODO: handle parameterised sql
 
-        res = self._getLivyResult(self._submitLivyCode(self._getLivySQL(sql)))
+        # final process for submition
+        final_code = self._getLivyPyspark(code) if language == "pyspark" else self._getLivySQL(code)
+        
+        res = self._getLivyResult(self._submitLivyCode(final_code, language))
         logger.debug(res)
         if res["output"]["status"] == "ok":
-            # values = res['output']['data']['application/json']
             values = res["output"]["data"]["application/json"]
             if len(values) >= 1:
                 self._rows = values["data"]  # values[0]['values']
@@ -566,15 +580,23 @@ class LivySessionConnectionWrapper(object):
     def fetchall(self):
         return self._cursor.fetchall()
 
-    def execute(self, sql, bindings=None):
+    # Add language parameter
+    def execute(self, sql, language, bindings=None):
+        # print("LivySessionConnectionWrapper.execute()".center(80,'-'))
+        # print(f"language={language}")
+        # TODO: get model language from job context and use that here
+        if language not in ['sql','pyspark']:
+            language = 'sql'
+        if 'def model(dbt, session):' in sql:
+            language = 'pyspark'
         if sql.strip().endswith(";"):
             sql = sql.strip()[:-1]
 
         if bindings is None:
-            self._cursor.execute(sql)
+            self._cursor.execute(sql, language)
         else:
             bindings = [self._fix_binding(binding) for binding in bindings]
-            self._cursor.execute(sql, *bindings)
+            self._cursor.execute(sql, language, *bindings)
 
     @property
     def description(self):

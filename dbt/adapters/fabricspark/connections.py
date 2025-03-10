@@ -237,7 +237,7 @@ class SparkConnectionManager(SQLConnectionManager):
         try:
             sql = "split(version(), ' ')[0] as version"
             cursor = connection.handle.cursor()
-            cursor.execute(sql)
+            cursor.execute(sql, 'sql')    # add language parameter
             res = cursor.fetchall()
             SparkConnectionManager.spark_version = res[0][0]
 
@@ -249,9 +249,11 @@ class SparkConnectionManager(SQLConnectionManager):
         os.environ["DBT_SPARK_VERSION"] = SparkConnectionManager.spark_version
         logger.debug(f"SPARK VERSION {os.getenv('DBT_SPARK_VERSION')}")
 
+    # Add language parameter.
     def add_query(
         self,
         sql: str,
+        language: str = 'sql',
         auto_begin: bool = True,
         bindings: Optional[Any] = None,
         abridge_sql_log: bool = False,
@@ -273,7 +275,7 @@ class SparkConnectionManager(SQLConnectionManager):
             cursor = connection.handle.cursor()
 
             try:
-                cursor.execute(sql, bindings)
+                cursor.execute(sql, language, bindings)
             except Exception as ex:
                 query_exception = ex
 

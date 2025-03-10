@@ -5,6 +5,8 @@ from dbt.adapters.base.relation import BaseRelation, Policy
 from dbt.adapters.events.logging import AdapterLogger
 from dbt_common.exceptions import DbtRuntimeError
 
+from dbt.exceptions import DbtRuntimeError
+from dbt.adapters.events.logging import AdapterLogger
 
 logger = AdapterLogger("fabricspark")
 

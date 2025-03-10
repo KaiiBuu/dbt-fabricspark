@@ -27,7 +27,6 @@ class ShortcutClient:
         self.token = token
         self.workspace_id = workspace_id
         self.item_id = item_id
-        self.endpoint = endpoint
 
     def parse_json(self, json_str: str) -> list:
         """
