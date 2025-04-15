@@ -44,6 +44,7 @@ class SparkCredentials(Credentials):
     #     executorCores: 4
     #     numExecutors: 3
     spark_config: Dict[str, Any] = field(default_factory=dict)
+    keep_session : bool = False
 
     @classmethod
     def __pre_deserialize__(cls, data: Any) -> Any:
