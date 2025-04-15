@@ -204,7 +204,45 @@ class LivySession:
         invalid_states = ["dead", "shutting_down", "killed"]
         return res["livyInfo"]["currentState"] not in invalid_states
 
+    def get_exist_session(self) -> str:
+        if self.credential.livy_session_name is None:
+            return None
+        logger.debug(f"Get existing livy session with name: {self.credential.livy_session_name}")
+        livy_session_name = self.credential.livy_session_name
+        res = requests.get(
+            self.connect_url + "/sessions",
+            headers=get_headers(self.credential, True),
+        ).json()
+        for session in res["items"]:
+            if session["name"] == livy_session_name:
+                if session["livyState"] in (["dead", "shutting_down", "killed"]):
+                    continue
+                while True:
+                    res = requests.get(
+                        self.connect_url + "/sessions/" + session["id"],
+                        headers=get_headers(self.credential, False),
+                    ).json()
+                    if res["state"] == "starting" or res["state"] == "not_started":
+                        # logger.debug("Polling Session creation status - ", self.connect_url + '/sessions/' + self.session_id )
+                        time.sleep(DEFAULT_POLL_WAIT)
+                    elif res["livyInfo"]["currentState"] == "idle":
+                        logger.debug(f"Session already exists: {session['id']}, {res}")
+                        self.session_id = session["id"]
+                        break
+            else:
+                continue
 
+        return self.session_id
+
+    def get_exist_session_or_create(self, data):
+        session_id = self.get_exist_session()
+        if session_id is None:
+            return self.create_session(data)
+        else:
+            return session_id
+
+    def is_keeping_session(self):
+        return self.credential.keep_session
 # cursor object - wrapped for livy API
 class LivyCursor:
     """
@@ -361,11 +399,24 @@ class LivyCursor:
 
         # TODO: handle parameterised sql
 
+        retries_time = 0
         # final process for submition
         final_code = self._getLivyPyspark(code) if language == "pyspark" else self._getLivySQL(code)
-        
-        res = self._getLivyResult(self._submitLivyCode(final_code, language))
-        logger.debug(res)
+        while True:
+            res = self._getLivyResult(self._submitLivyCode(final_code, language))
+            logger.debug(res)
+            if res["state"] == "available":
+                logger.debug("Get result with available state")
+                if res["output"]["status"] == 'error' and res["output"]["evalue"].startswith(
+                        "Request failed: HTTP/1.1 403 Forbidden ClientRequestId:"):
+                    if retries_time < 5:
+                        logger.debug(f"Result available but facing error: {res}")
+                        logger.debug(f"Start retries {retries_time + 1}")
+                        logger.debug(f"Sleep {(retries_time) * 10 + 10}")
+                        time.sleep(retries_time * 10 + 10)
+                        retries_time += 1
+                        continue
+                break
         if res["output"]["status"] == "ok":
             values = res["output"]["data"]["application/json"]
             if len(values) >= 1:
@@ -485,10 +536,10 @@ class LivySessionManager:
     @staticmethod
     def connect(credentials: SparkCredentials) -> LivyConnection:
         # the following opens an spark / sql session
-        data = {"kind": "sql", "conf": credentials.livy_session_parameters}  # 'spark'
+        data = {"kind": "sql", "conf": credentials.livy_session_parameters, "name": credentials.livy_session_name}  # 'spark'
         if __class__.livy_global_session is None:
             __class__.livy_global_session = LivySession(credentials)
-            __class__.livy_global_session.create_session(data)
+            __class__.livy_global_session.get_exist_session_or_create(data)
             __class__.livy_global_session.is_new_session_required = False
             # create shortcuts, if there are any
             if credentials.shortcuts_json_path:
@@ -508,7 +559,7 @@ class LivySessionManager:
 
     @staticmethod
     def disconnect() -> None:
-        if __class__.livy_global_session.is_valid_session():
+        if __class__.livy_global_session.is_valid_session() and not __class__.livy_global_session.is_keeping_session():
             __class__.livy_global_session.delete_session()
             __class__.livy_global_session.is_new_session_required = True
 

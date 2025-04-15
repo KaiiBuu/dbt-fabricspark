@@ -5,6 +5,7 @@ import dbt.exceptions
 
 @dataclass
 class SparkCredentials(Credentials):
+    livy_session_name: Optional[str] = None
     schema: Optional[str] = None  # type: ignore
     method: str = "livy"
     workspaceid: str = None
@@ -21,6 +22,7 @@ class SparkCredentials(Credentials):
     livy_session_parameters: Dict[str, Any] = field(default_factory=dict)
     retry_all: bool = False
     shortcuts_json_path: Optional[str] = None
+    keep_session : bool = False
 
     @classmethod
     def __pre_deserialize__(cls, data: Any) -> Any:
