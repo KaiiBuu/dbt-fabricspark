@@ -26,8 +26,24 @@ livysession_credentials: SparkCredentials
 DEFAULT_POLL_WAIT = 45
 DEFAULT_POLL_STATEMENT_WAIT = 5
 AZURE_CREDENTIAL_SCOPE = "https://analysis.windows.net/powerbi/api/.default"
+
+DEFAULT_EXECUTE_RETRIES_TIME = 5
+DEFAULT_EXECUTE_RETRIES_WAIT = 10
+EXECUTE_RETRIES_PATTERNS = ["Request failed: HTTP/1.1 403 Forbidden ClientRequestId"]
+
 accessToken: AccessToken = None
 
+def check_retry_condition_when_execute(res: dict):
+    if res["output"]["status"] == "error":
+        for pattern in EXECUTE_RETRIES_PATTERNS:
+            if pattern in res["output"]["evalue"]:
+                return True
+    return False
+
+def check_retry_condition_when_submit_code(res: dict):
+    if res["status"] == "error":
+        return True
+    return False
 
 def is_token_refresh_necessary(unixTimestamp: int) -> bool:
     # Convert to datetime object
@@ -324,14 +340,26 @@ class LivyCursor:
 
         # Submit code. Enable pyspark tasks.
         data = {"code": code, "kind": language}
+        logger.info("Submitting livy code")
         logger.debug(
             f"Submitted: {data} {self.connect_url + '/sessions/' + self.session_id + '/statements'}"
         )
-        res = requests.post(
-            self.connect_url + "/sessions/" + self.session_id + "/statements",
-            data=json.dumps(data),
-            headers=get_headers(self.credential, False),
-        )
+        retries_time = 0
+        while True:
+            res = requests.post(
+                self.connect_url + "/sessions/" + self.session_id + "/statements",
+                data=json.dumps(data),
+                headers=get_headers(self.credential, False),
+            )
+            if check_retry_condition_when_submit_code(res.json()):
+                if retries_time < DEFAULT_EXECUTE_RETRIES_TIME:
+                    logger.info(f"Submit code error: {res}")
+                    logger.info(f"Start retries {retries_time + 1}")
+                    time.sleep(retries_time * DEFAULT_EXECUTE_RETRIES_WAIT + DEFAULT_EXECUTE_RETRIES_WAIT)
+                    retries_time += 1
+                    continue
+                break
+
         return res
 
     def _getLivySQL(self, sql) -> str:
@@ -353,6 +381,7 @@ class LivyCursor:
 
     def _getLivyResult(self, res_obj) -> Response:
         json_res = res_obj.json()
+        logger.info(f"""Get livy result: {json_res["id"]}""")
         while True:
             res = requests.get(
                 self.connect_url
@@ -366,6 +395,7 @@ class LivyCursor:
             # print(res)
             if res["state"] == "available":
                 return res
+            logger.info(f"Get response with state {res['state']}")
             time.sleep(DEFAULT_POLL_STATEMENT_WAIT)
 
     # Support pyspark tasks.
@@ -402,18 +432,16 @@ class LivyCursor:
         retries_time = 0
         # final process for submition
         final_code = self._getLivyPyspark(code) if language == "pyspark" else self._getLivySQL(code)
+        logger.info("Start to execute livy code")
         while True:
             res = self._getLivyResult(self._submitLivyCode(final_code, language))
-            logger.debug(res)
             if res["state"] == "available":
-                logger.debug("Get result with available state")
-                if res["output"]["status"] == 'error' and res["output"]["evalue"].startswith(
-                        "Request failed: HTTP/1.1 403 Forbidden ClientRequestId:"):
-                    if retries_time < 5:
-                        logger.debug(f"Result available but facing error: {res}")
-                        logger.debug(f"Start retries {retries_time + 1}")
-                        logger.debug(f"Sleep {(retries_time) * 10 + 10}")
-                        time.sleep(retries_time * 10 + 10)
+                logger.info("Get result with available state")
+                if check_retry_condition_when_execute(res):
+                    if retries_time < DEFAULT_EXECUTE_RETRIES_TIME:
+                        logger.info(f"Get result is available but facing error: {res}")
+                        logger.info(f"Start retries {retries_time + 1}")
+                        time.sleep(retries_time * DEFAULT_EXECUTE_RETRIES_WAIT + DEFAULT_EXECUTE_RETRIES_WAIT)
                         retries_time += 1
                         continue
                 break
