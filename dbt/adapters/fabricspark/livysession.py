@@ -41,7 +41,7 @@ def check_retry_condition_when_execute(res: dict):
     return False
 
 def check_retry_condition_when_submit_code(res: dict):
-    if res["status"] == "error":
+    if res["state"] == "error":
         return True
     return False
 
@@ -353,12 +353,13 @@ class LivyCursor:
             )
             if check_retry_condition_when_submit_code(res.json()):
                 if retries_time < DEFAULT_EXECUTE_RETRIES_TIME:
-                    logger.info(f"Submit code error: {res}")
+                    logger.debug(f"Submit code error: {res}")
                     logger.info(f"Start retries {retries_time + 1}")
                     time.sleep(retries_time * DEFAULT_EXECUTE_RETRIES_WAIT + DEFAULT_EXECUTE_RETRIES_WAIT)
                     retries_time += 1
                     continue
                 break
+            return res
 
         return res
 
@@ -439,7 +440,7 @@ class LivyCursor:
                 logger.info("Get result with available state")
                 if check_retry_condition_when_execute(res):
                     if retries_time < DEFAULT_EXECUTE_RETRIES_TIME:
-                        logger.info(f"Get result is available but facing error: {res}")
+                        logger.debug(f"Get result is available but facing error: {res}")
                         logger.info(f"Start retries {retries_time + 1}")
                         time.sleep(retries_time * DEFAULT_EXECUTE_RETRIES_WAIT + DEFAULT_EXECUTE_RETRIES_WAIT)
                         retries_time += 1
