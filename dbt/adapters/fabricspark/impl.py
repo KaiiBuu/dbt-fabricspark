@@ -27,7 +27,9 @@ from dbt.adapters.base import BaseRelation
 from dbt.adapters.base.relation import InformationSchema
 
 from dbt.adapters.sql import SQLAdapter
-
+from dbt.adapters.exceptions import (
+    RelationReturnedMultipleResultsError
+)
 from dbt.adapters.fabricspark import SparkConnectionManager
 from dbt.adapters.fabricspark import SparkRelation
 from dbt.adapters.fabricspark import SparkColumn
@@ -259,7 +261,24 @@ class SparkAdapter(SQLAdapter):
         if not self.Relation.get_default_include_policy().database:
             database = None  # type: ignore
 
-        return super().get_relation(database, schema, identifier)
+        # ncb.hoangnh9 change here to fix not match relation
+        # return super().get_relation(database, schema, identifier)
+
+        relations_list = self.list_relations(database, schema)
+        matches = self._make_match(relations_list, database, None, identifier)
+
+        if len(matches) > 1:
+            kwargs = {
+                "identifier": identifier,
+                "schema": schema,
+                "database": database,
+            }
+            raise RelationReturnedMultipleResultsError(kwargs, matches)
+
+        elif matches:
+            return matches[0]
+
+        return None
 
     def parse_describe_extended(
         self, relation: BaseRelation, raw_rows: AttrDict

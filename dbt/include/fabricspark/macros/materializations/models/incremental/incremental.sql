@@ -11,16 +11,17 @@
 
   {%- set unique_key = config.get('unique_key', none) -%}
   {%- set partition_by = config.get('partition_by', none) -%}
+  {%- set tmp_include_database = config.get('tmp_include_database', true)-%}
+  {%- set tmp_include_schema = config.get('tmp_include_schema', true)-%}
   {%- set language = model['language'] -%}
   {%- set on_schema_change = incremental_validate_on_schema_change(config.get('on_schema_change'), default='ignore') -%}
   {%- set incremental_predicates = config.get('predicates', none) or config.get('incremental_predicates', none) -%}
   {%- set target_relation = this -%}
   {%- set existing_relation = load_relation(this) -%}
   {%- set tmp_relation = make_temp_relation(this) -%}
-
   {#-- for SQL model we will create temp view that doesn't have database and schema --#}
   {%- if language == 'sql'-%}
-    {%- set tmp_relation = tmp_relation.include(database=false, schema=false) -%}
+    {%- set tmp_relation = tmp_relation.include(database=tmp_include_database, schema=tmp_include_schema) -%}
   {%- endif -%}
 
   {#-- Set Overwrite Mode --#}
