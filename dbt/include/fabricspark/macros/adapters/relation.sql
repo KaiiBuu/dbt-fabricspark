@@ -42,6 +42,20 @@
     {% set tmp_relation = base_relation.incorporate(path = {
         "identifier": tmp_identifier
     }) -%}
+    {% set tmp_schema = config.get("tmp_schema", None) %}\
+    {% set tmp_database = config.get("tmp_database", None) %}
+    {% if tmp_schema %}
+        {% if tmp_database %}
+            {% set tmp_relation = base_relation.incorporate(
+                                path={"identifier": tmp_identifier, "schema": tmp_schema, "database": tmp_database}) -%}
+        {% else %}
+            {% set tmp_relation = base_relation.incorporate(
+                                path={"identifier": tmp_identifier, "schema": tmp_schema}) -%}
+        {% endif %}
+    {% else %}
+        {% set tmp_relation = base_relation.incorporate(
+                                path={"identifier": tmp_identifier}) -%}
+    {% endif %}
 
     {% do return(tmp_relation) %}
 {% endmacro %}
