@@ -11,7 +11,7 @@
 
   {%- set unique_key = config.get('unique_key', none) -%}
   {%- set partition_by = config.get('partition_by', none) -%}
-  {%- set tmp_include_database = config.get('tmp_include_database', true)-%}
+  {%- set tmp_include_database = config.get('tmp_include_database', false)-%}
   {%- set tmp_include_schema = config.get('tmp_include_schema', true)-%}
   {%- set language = model['language'] -%}
   {%- set on_schema_change = incremental_validate_on_schema_change(config.get('on_schema_change'), default='ignore') -%}
@@ -54,7 +54,7 @@
   {%- else -%}
     {#-- Relation must be merged --#}
     {%- call statement('create_tmp_relation', language=language) -%}
-      {{ create_table_as(True, tmp_relation, compiled_code, language) }}
+      {{ create_table_as(False, tmp_relation, compiled_code, language) }}
     {%- endcall -%}
     {%- do process_schema_changes(on_schema_change, tmp_relation, existing_relation) -%}
     {%- call statement('main') -%}
