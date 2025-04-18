@@ -14,6 +14,14 @@ from dbt.adapters.sql import SQLAdapter
 from dbt.adapters.exceptions import (
     RelationReturnedMultipleResultsError
 )
+from dbt_common.events.functions import fire_event
+from dbt.adapters.events.types import (
+    ListRelations,
+)
+from dbt_common.utils import (
+    cast_to_str,
+)
+from dbt.adapters.cache import _make_ref_key_dict
 from dbt.adapters.fabricspark import SparkConnectionManager
 from dbt.adapters.fabricspark import SparkRelation
 from dbt.adapters.fabricspark import SparkColumn
@@ -241,6 +249,43 @@ class SparkAdapter(SQLAdapter):
                     f"Error while retrieving information about {schema_relation}: {errmsg}"
                 )
                 return []
+
+    def list_relations(self, database: Optional[str], schema: str) -> List[BaseRelation]:
+        # ncb.hoangnh disable get schema cached
+        # if self._schema_is_cached(database, schema):
+        #     return self.cache.get_relations(database, schema)
+
+        schema_relation = self.Relation.create(
+            database=database,
+            schema=schema,
+            identifier="",
+            quote_policy=self.config.quoting,
+        ).without_identifier()
+
+        # we can't build the relations cache because we don't have a
+        # manifest so we can't run any operations.
+        relations = self.list_relations_without_caching(schema_relation)
+
+        # if the cache is already populated, add this schema in
+        # otherwise, skip updating the cache and just ignore
+        if self.cache:
+            for relation in relations:
+                self.cache.add(relation)
+            if not relations:
+                # it's possible that there were no relations in some schemas. We want
+                # to insert the schemas we query into the cache's `.schemas` attribute
+                # so we can check it later
+                self.cache.update_schemas([(database, schema)])
+
+        fire_event(
+            ListRelations(
+                database=cast_to_str(database),
+                schema=schema,
+                relations=[_make_ref_key_dict(x) for x in relations],
+            )
+        )
+
+        return relations
 
     def get_relation(self, database: str, schema: str, identifier: str) -> Optional[BaseRelation]:
         if not self.Relation.get_default_include_policy().database:
