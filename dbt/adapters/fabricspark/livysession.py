@@ -34,14 +34,14 @@ EXECUTE_RETRIES_PATTERNS = ["Request failed: HTTP/1.1 403 Forbidden ClientReques
 accessToken: AccessToken = None
 
 def check_retry_condition_when_execute(res: dict):
-    if res["output"]["status"] == "error":
+    if "output" in res and res["output"]["status"] == "error":
         for pattern in EXECUTE_RETRIES_PATTERNS:
             if pattern in res["output"]["evalue"]:
                 return True
     return False
 
 def check_retry_condition_when_submit_code(res: dict):
-    if res["state"] == "error":
+    if "state" in res and res["state"] == "error":
         return True
     return False
 
@@ -415,6 +415,8 @@ class LivyCursor:
 
     def _getLivyResult(self, res_obj) -> Response:
         json_res = res_obj.json()
+        if "id" not in json_res:
+            raise Exception(f"Getting unexpected result: {json_res}")
         logger.info(f"""Get livy result: {json_res["id"]}""")
         while True:
             res = requests.get(
@@ -426,7 +428,6 @@ class LivyCursor:
                 headers=get_headers(self.credential, False),
             ).json()
 
-            # print(res)
             if res["state"] == "available":
                 return res
             logger.info(f"Get response with state {res['state']}")

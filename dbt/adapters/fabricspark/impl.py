@@ -199,12 +199,14 @@ class SparkAdapter(SQLAdapter):
         self,
         row_list: agate.Table,
         relation_info_func: Callable[[agate.Row], RelationInfo],
+        overwrite_schema: str = None
     ) -> List[BaseRelation]:
         """Aggregate relations with format metadata included."""
         relations = []
         for row in row_list:
             _schema, name, information = relation_info_func(row)
-
+            if overwrite_schema:
+                _schema = overwrite_schema
             rel_type: RelationType = (
                 RelationType.View if "Type: VIEW" in information else RelationType.Table
             )
@@ -237,6 +239,7 @@ class SparkAdapter(SQLAdapter):
             return self._build_spark_relation_list(
                 row_list=show_table_extended_rows,
                 relation_info_func=self._get_relation_information,
+                overwrite_schema = schema_relation.schema
             )
         except DbtRuntimeError as e:
             errmsg = getattr(e, "msg", "")
@@ -267,9 +270,8 @@ class SparkAdapter(SQLAdapter):
 
     def list_relations(self, database: Optional[str], schema: str) -> List[BaseRelation]:
         # ncb.hoangnh disable get schema cached
-        # if self._schema_is_cached(database, schema):
-        #     return self.cache.get_relations(database, schema)
-
+        if self._schema_is_cached(database, schema):
+            return self.cache.get_relations(database, schema)
         schema_relation = self.Relation.create(
             database=database,
             schema=schema,

@@ -1,0 +1,7 @@
+version: 2
+
+models:
+  - name: sgr_location_group
+    config:
+      workspace_id: "{{ env_var('DBT_WORKSPACE_ID') }}"
+      lh_bronze_id: "{{ env_var('DBT_LH_BRONZE_ID') }}"

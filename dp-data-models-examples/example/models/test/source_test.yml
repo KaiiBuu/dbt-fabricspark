@@ -1,0 +1,7 @@
+version: 2
+
+sources:
+  - name: dbt_mat
+    schema: lh_dp_bronze.dbt_mat
+    tables:
+      - name: stg_people_info

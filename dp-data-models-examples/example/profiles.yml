@@ -1,0 +1,34 @@
+example:
+  outputs:
+    dev:
+      authentication: SPN
+      client_id: "{{ env_var('DBT_CLIENT_ID', 'test') }}"
+      client_secret: "{{ env_var('DBT_CLIENT_SECRET', 'test') }}"
+      connect_retries: 1
+      connect_timeout: 30
+      endpoint: https://msitapi.fabric.microsoft.com/v1
+      lakehouse: "{{ env_var('DBT_LAKEHOUSE', 'test') }}"
+      lakehouseid: "{{ env_var('DBT_LAKEHOUSE_ID', 'test') }}"
+      method: livy
+      schema: dbo
+      tenant_id: "{{ env_var('DBT_TENANT_ID', 'test') }}"
+      threads: 1
+      type: fabricspark
+      workspaceid: "{{ env_var('DBT_WORKSPACE_ID', 'test') }}"
+      spark_config:
+        name: "{{ env_var('DBT_SESSION_NAME', 'test') }}"
+#        archives:
+#            - "example-archive.zip"
+#        conf:
+#            spark.executor.memory: "7g"
+#            spark.executor.cores: "4"
+#        tags:
+#            project: "example-project"
+#            user: "example-user"
+#        driverMemory: "7g"
+#        driverCores: 4
+#        executorMemory: "7g"
+#        executorCores: 4
+#        numExecutors: 3
+      keep_session: true # no delete session after run
+  target: dev

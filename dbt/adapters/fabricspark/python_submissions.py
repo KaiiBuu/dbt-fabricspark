@@ -52,7 +52,7 @@ class BaseFabricSparkHelper(PythonJobHelper):
         cursor = self.connection.cursor()
         try:
             cursor.execute(compiled_code, 'pyspark')
-            for line in cursor.fetchall():
-                print(line)
+            # for line in cursor.fetchall():
+            #     print(line)
         except DbtDatabaseError as ex:
             raise DbtRuntimeError(f"Unable to create model {self.relation_name}(file: {self.original_file_path}) with a {self.submission_method} type submission. Caused by:\n{ex.msg}")
